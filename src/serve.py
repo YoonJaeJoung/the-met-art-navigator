@@ -118,7 +118,8 @@ async def startup():
     coords_path = DATA_DIR / "gallery_coords.json"
     if coords_path.exists():
         with open(coords_path, "r") as f:
-            _state["gallery_coords"] = json.load(f)
+            data = json.load(f)
+            _state["gallery_coords"] = data.get("galleries", data)
         print("✓ Live Gallery mapping coordinates loaded")
 
     # Load embedding models for online inference
