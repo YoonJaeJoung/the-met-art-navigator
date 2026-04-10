@@ -19,7 +19,7 @@ function PinIcon({ selected }) {
   );
 }
 
-export default function MapViewer({ results, selectedResult, onSelectResult }) {
+export default function MapViewer({ results, selectedResult, onSelectResult, mode = 'artworks' }) {
   const [activeFloor, setActiveFloor] = useState('1');
   const mapRef = useRef(null);
 
@@ -34,10 +34,13 @@ export default function MapViewer({ results, selectedResult, onSelectResult }) {
     return counts;
   }, [results]);
 
-  // Auto-switch to the floor with most results  
+  // Auto-switch to the floor with most results
   useMemo(() => {
-    if (selectedResult?.floor) {
+    if (mode === 'artworks' && selectedResult?.floor) {
       setActiveFloor(selectedResult.floor);
+    } else if (mode === 'galleries' && selectedResult) {
+      const selectedPin = (results || []).find(r => r.GalleryNumber === selectedResult);
+      if (selectedPin?.floor) setActiveFloor(selectedPin.floor);
     } else if (results?.length > 0) {
       const floors = Object.entries(pinsByFloor);
       if (floors.length > 0) {
@@ -45,7 +48,7 @@ export default function MapViewer({ results, selectedResult, onSelectResult }) {
         setActiveFloor(floors[0][0]);
       }
     }
-  }, [selectedResult, results, pinsByFloor]);
+  }, [selectedResult, results, pinsByFloor, mode]);
 
   const floorConfig = FLOOR_CONFIG.find((f) => f.id === activeFloor) || FLOOR_CONFIG[0];
   const floorPins = (results || []).filter((r) => r.floor === activeFloor && r.x_pct != null && r.y_pct != null);
@@ -71,34 +74,46 @@ export default function MapViewer({ results, selectedResult, onSelectResult }) {
         {results && results.length > 0 ? (
           <div className="map-wrapper" ref={mapRef}>
             <img
-              src={`http://localhost:8000${floorConfig.file}`}
+              src={floorConfig.file}
               alt={floorConfig.label}
               draggable={false}
             />
-            {floorPins.map((pin) => (
-              <div
-                key={pin.objectID}
-                className={`map-pin ${selectedResult?.objectID === pin.objectID ? 'selected' : ''}`}
-                style={{
-                  left: `${pin.x_pct * 100}%`,
-                  top: `${pin.y_pct * 100}%`,
-                  zIndex: selectedResult?.objectID === pin.objectID ? 100 : 5,
-                }}
-                onClick={() => onSelectResult(pin)}
-              >
-                <PinIcon selected={selectedResult?.objectID === pin.objectID} />
-                <div 
-                  className="pin-tooltip"
+            {floorPins.map((pin) => {
+              const uniqueKey = mode === 'artworks' ? pin.objectID : pin.GalleryNumber;
+              const isSelected = mode === 'artworks' 
+                ? selectedResult?.objectID === pin.objectID 
+                : selectedResult === pin.GalleryNumber;
+
+              return (
+                <div
+                  key={uniqueKey}
+                  className={`map-pin ${isSelected ? 'selected' : ''}`}
                   style={{
-                    transform: pin.x_pct > 0.8 ? 'translateX(-100%)' : pin.x_pct < 0.2 ? 'translateX(0)' : 'translateX(-50%)',
-                    left: pin.x_pct > 0.8 ? '0' : pin.x_pct < 0.2 ? '100%' : '50%',
-                    marginLeft: pin.x_pct > 0.8 ? '-12px' : pin.x_pct < 0.2 ? '12px' : '0'
+                    left: `${pin.x_pct * 100}%`,
+                    top: `${pin.y_pct * 100}%`,
+                    zIndex: isSelected ? 100 : 5,
+                    cursor: mode === 'galleries' ? 'pointer' : 'default',
+                    opacity: mode === 'galleries' && selectedResult && !isSelected ? 0.4 : 1
+                  }}
+                  onClick={() => {
+                    if (mode === 'galleries') onSelectResult(pin.GalleryNumber);
+                    else if (onSelectResult) onSelectResult(pin);
                   }}
                 >
-                  {pin.title} — Gallery {pin.GalleryNumber}
+                  <PinIcon selected={isSelected} />
+                  <div 
+                    className="pin-tooltip"
+                    style={{
+                      transform: pin.x_pct > 0.8 ? 'translateX(-100%)' : pin.x_pct < 0.2 ? 'translateX(0)' : 'translateX(-50%)',
+                      left: pin.x_pct > 0.8 ? '0' : pin.x_pct < 0.2 ? '100%' : '50%',
+                      marginLeft: pin.x_pct > 0.8 ? '-12px' : pin.x_pct < 0.2 ? '12px' : '0'
+                    }}
+                  >
+                    {mode === 'artworks' ? `${pin.title} — Gallery ${pin.GalleryNumber}` : `Gallery ${pin.GalleryNumber}`}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="empty-state">

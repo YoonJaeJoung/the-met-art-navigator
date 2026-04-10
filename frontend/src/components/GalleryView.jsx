@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import ArtworkModal from './ArtworkModal';
+import MapViewer from './MapViewer';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -10,12 +11,42 @@ export default function GalleryView() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [modalResult, setModalResult] = useState(null);
+  
+  // Interactive Map States
+  const [galleries, setGalleries] = useState([]);
+  const [selectedGallery, setSelectedGallery] = useState(null);
+
+  // Fetch full gallery map payload once
+  useEffect(() => {
+    const fetchMap = async () => {
+      try {
+        const res = await fetch(`${API}/gallery-map`);
+        const data = await res.json();
+        // Convert map dictionary to array for MapViewer consumption
+        const mappedArray = Object.entries(data).map(([k, v]) => ({
+          GalleryNumber: k,
+          ...v
+        }));
+        setGalleries(mappedArray);
+      } catch (err) {
+        console.error('Failed to fetch gallery map:', err);
+      }
+    };
+    fetchMap();
+  }, []);
 
   useEffect(() => {
     const fetchGallery = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`${API}/gallery?page=${page}&page_size=50`);
+        const url = new URL(`${API}/gallery`);
+        url.searchParams.append('page', page);
+        url.searchParams.append('page_size', '50');
+        if (selectedGallery) {
+          url.searchParams.append('gallery', selectedGallery);
+        }
+
+        const res = await fetch(url.toString());
         const data = await res.json();
         setItems(data.results || []);
         setTotalPages(data.pages || 1);
@@ -23,12 +54,11 @@ export default function GalleryView() {
       } catch (err) {
         console.error('Failed to fetch gallery:', err);
       } finally {
-        // slight delay to let images paint smoothly
         setTimeout(() => setLoading(false), 300);
       }
     };
     fetchGallery();
-  }, [page]);
+  }, [page, selectedGallery]);
 
   if (loading) {
     return (
@@ -43,11 +73,42 @@ export default function GalleryView() {
 
   return (
     <div className="gallery-view" style={{ flex: 1, padding: 24, overflowY: 'auto' }}>
+      
+      {/* Visual Map Layout Block */}
+      <div style={{ marginBottom: 32, background: 'var(--color-surface-raised)', borderRadius: 12, padding: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h3 style={{ margin: 0, fontSize: 18 }}>Museum Map Overview</h3>
+          {selectedGallery && (
+            <button 
+              onClick={() => { setSelectedGallery(null); setPage(1); }}
+              style={{ background: 'var(--color-surface)', padding: '6px 12px', border: '1px solid var(--color-border)', borderRadius: 6, cursor: 'pointer' }}
+            >
+              Clear Map Filter
+            </button>
+          )}
+        </div>
+        <div style={{ height: 450, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--color-border)' }}>
+          <MapViewer 
+            mode="galleries"
+            results={galleries}
+            selectedResult={selectedGallery}
+            onSelectResult={(galleryId) => {
+              if (selectedGallery === galleryId) {
+                setSelectedGallery(null);
+              } else {
+                setSelectedGallery(galleryId);
+              }
+              setPage(1);
+            }}
+          />
+        </div>
+      </div>
+
       <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h2>Processed Artworks Gallery</h2>
+          <h2>{selectedGallery ? `Artworks in Gallery ${selectedGallery}` : 'All Processed Artworks'}</h2>
           <p style={{ color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            {totalCount} total artworks available in the dataset (Page {page} of {totalPages}).
+            {totalCount} total artworks {selectedGallery ? 'found' : 'available'} (Page {page} of {totalPages}).
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -63,7 +124,7 @@ export default function GalleryView() {
           <button 
             className="train-btn" 
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
+            disabled={page === totalPages || totalPages === 0}
             style={{ padding: '6px 12px', background: 'var(--color-surface-raised)', color: 'var(--color-text)' }}
           >
             Next
@@ -71,7 +132,7 @@ export default function GalleryView() {
         </div>
       </div>
 
-      {items.length > 0 ? (
+      {!loading && items.length > 0 ? (
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
@@ -116,13 +177,13 @@ export default function GalleryView() {
             </div>
           ))}
         </div>
-      ) : (
+      ) : !loading ? (
         <div className="empty-state">
           <span className="empty-icon">🖼️</span>
-          <h3>No Artworks</h3>
-          <p>The metadata table is empty. Try running the data ingestion pipeline.</p>
+          <h3>No Artworks Found</h3>
+          <p>{selectedGallery ? `No processed artworks mapped to Gallery ${selectedGallery}.` : 'The metadata table is empty. Try running the data ingestion pipeline.'}</p>
         </div>
-      )}
+      ) : null}
 
       {modalResult && (
         <ArtworkModal 
