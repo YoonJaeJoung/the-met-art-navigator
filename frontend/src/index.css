@@ -470,10 +470,8 @@ body {
   flex: 1;
   position: relative;
   overflow: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 20px;
+  text-align: center;
 }
 
 .map-wrapper {

@@ -1,3 +1,13 @@
+---
+title: Met Art Navigator API
+emoji: 🖼️
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+app_port: 7860
+---
+
 # MET Guide
 ## General Information
 
