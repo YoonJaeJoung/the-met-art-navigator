@@ -4,7 +4,8 @@ FROM python:3.10-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PORT=7860 \
-    HOME=/home/user 
+    HOME=/home/user \
+    PATH=/home/user/.local/bin:$PATH
 
 # Install system dependencies if any are needed for FAISS or OpenCV
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -28,4 +29,4 @@ COPY --chown=user . .
 EXPOSE 7860
 
 # Run the backend using Uvicorn directly
-CMD ["uvicorn", "src.serve:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["python", "-m", "uvicorn", "src.serve:app", "--host", "0.0.0.0", "--port", "7860"]
