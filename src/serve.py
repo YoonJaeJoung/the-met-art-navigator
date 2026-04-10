@@ -57,8 +57,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve map images as static files
-app.mount("/map", StaticFiles(directory=str(MAP_DIR)), name="map")
+# Serve map images as static files (only locally where map dir exists)
+if MAP_DIR.exists():
+    app.mount("/map", StaticFiles(directory=str(MAP_DIR)), name="map")
 
 # ─── Global State ────────────────────────────────────────────────────────────
 
