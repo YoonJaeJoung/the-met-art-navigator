@@ -127,14 +127,22 @@ body {
 
 /* ─── Search Panel (Left Sidebar) ─────────────────────────── */
 
-.search-panel {
+.search-results-column {
   width: 360px;
   flex-shrink: 0;
-  background: var(--color-surface);
-  border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.search-panel {
+  flex-shrink: 0;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
 }
 
 .search-panel-header {
@@ -323,24 +331,65 @@ body {
 
 /* ─── Results Sidebar ─────────────────────────────────────── */
 
+.results-sidebar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.results-tabs {
+  display: flex;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  padding: 4px;
+}
+
+.results-tab-btn {
+  flex: 1;
+  padding: 8px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.results-tab-btn:hover:not(.disabled) {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.results-tab-btn.active {
+  background: var(--color-surface-raised);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.results-tab-btn.disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 .results-list {
   flex: 1;
   overflow-y: auto;
   padding: 0;
 }
 
-.results-header {
-  padding: 12px 20px;
+.empty-state.mini {
+  padding: 40px 20px;
+}
+
+.empty-state.mini p {
   font-size: 12px;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
-  position: sticky;
-  top: 0;
-  z-index: 2;
+  color: var(--color-text-muted);
 }
 
 .result-card {
@@ -422,7 +471,6 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
   background: var(--color-bg);
 }
 
@@ -477,6 +525,7 @@ body {
 .map-wrapper {
   position: relative;
   display: inline-block;
+  padding: 0 40px; /* Safety gutter for tooltips near edges */
 }
 
 .map-wrapper img {
@@ -488,8 +537,6 @@ body {
 
 .map-pin {
   position: absolute;
-  width: 24px;
-  height: 24px;
   transform: translate(-50%, -100%);
   cursor: pointer;
   z-index: 5;
@@ -499,7 +546,7 @@ body {
 
 .map-pin:hover {
   transform: translate(-50%, -100%) scale(1.3);
-  z-index: 10;
+  z-index: 500; /* High enough to top most elements but below modal */
 }
 
 .map-pin svg {
@@ -518,7 +565,7 @@ body {
   bottom: 100%;
   white-space: normal;
   width: max-content;
-  max-width: 220px;
+  max-width: min(220px, 70vw);
   text-align: center;
   background: var(--color-surface-raised);
   color: var(--color-text);
@@ -767,4 +814,52 @@ body {
 @keyframes shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
+}
+/* ─── Responsive ────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .app-header {
+    padding: 10px 16px;
+  }
+  
+  .app-header h1 {
+    font-size: 16px;
+  }
+  
+  .nav-tab {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .app-body.view-search {
+    flex-direction: column;
+  }
+
+  .search-results-column {
+    width: 100%;
+    order: 2; /* Results at bottom */
+    border-right: none;
+    border-top: 1px solid var(--color-border);
+    max-height: 50%;
+  }
+
+  .map-viewer {
+    order: 1; /* Map at top */
+    flex: 1;
+    min-height: 40vh;
+  }
+
+  .app-body.view-search:not(.has-results) .search-results-column {
+    order: 1; /* Search at top if no results yet */
+    height: auto;
+  }
+
+  .app-body.view-search:not(.has-results) .map-viewer {
+    order: 2;
+    height: 30vh;
+  }
+
+  .map-wrapper img {
+    max-height: 35vh;
+  }
 }

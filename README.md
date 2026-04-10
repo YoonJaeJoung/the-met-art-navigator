@@ -96,11 +96,13 @@ Open `http://localhost:5173` in your browser.
 
 ### 5. Using the app
 1. **Search by text**: Type a style, period, or keyword (e.g. "impressionist landscape") and press Search.
+   - **Semantic Matches**: Highly accurate text-to-text matching using raw Nomic embeddings.
+   - **Visual Matches**: Cross-modal retrieval matching your query against visual image features.
 2. **Search by image**: Drag-and-drop or upload an artwork image and press Search.
-3. **View results on the map**: Matched artworks appear as pins on the Met floor plan. Switch floors using the tab selector.
-4. **Train the model**: Click the "Train" button to start contrastive model training. A live loss chart updates in real-time via WebSocket. 
-   > [!NOTE]
-   > **Early Stopping**: The trainer includes an automated "Early Stopping" monitor. If the validation loss stops improving for 5 epochs, the training will finish early to prevent overfitting and save the best model weights.
+3. **Toggle Results**: Switch between **Semantic** and **Visual** result categories using the tabs in the sidebar.
+4. **View results on the map**: Matched artworks appear as pins on the Met floor plan. Switch floors using the tab selector.
+   - **Responsive Scaling**: Pins scale proportionally with the map wide, ensuring precision on both desktop and mobile devices.
+   - **Mobile View**: On smaller screens, the layout automatically stacks the map above the results for easier navigation.
 5. **Explore the Gallery**: Browse the entire processed collection with high-performance **pagination**.
 6. **View Artwork Details**: Click any artwork in the search results or gallery to see a detailed modal with descriptions, medium, culture, and a direct link to the Met website.
 
@@ -108,32 +110,18 @@ Open `http://localhost:5173` in your browser.
 
 ## Machine Learning — What & Why
 
-### Overview
-This project uses **cross-modal retrieval** to bridge the gap between text descriptions and artwork images. Given a text query (e.g. "cubist still life") or an uploaded image, the system finds the most visually or semantically similar artworks in The Met's on-view collection and shows their physical location in the museum.
+The system uses a **Dual Search Engine** strategy:
 
-### Foundation Models Used
+1. **Semantic Search (High-Fidelity)**: Targeted at artworks **with** detailed descriptions. It uses raw 768-d Nomic text embeddings to preserve full semantic nuances without projection-based loss.
+2. **Visual Search (Projected)**: Targeted at artworks **without** descriptions. It uses cross-modal learning to find artworks based on their visual features by projecting queries into a shared 512-d space.
 
-| Model | Role | Output Dim | Source |
-|-------|------|-----------|--------|
-| **DINOv2-small** | Image feature extraction | 384 | Meta AI — self-supervised vision transformer trained on 142M images. Captures rich visual semantics (texture, color, composition) without task-specific labels. |
-| **Nomic Embed Text v1.5** | Text feature extraction | 768 | Nomic AI — long-context text embedding model. Encodes artwork metadata (title, artist, medium, culture, period, tags) into dense semantic vectors. |
-
-### Contrastive Learning (InfoNCE / CLIP-style)
-The two foundation models produce embeddings in **different** vector spaces (384-d for images, 768-d for text). A custom two-tower projection network aligns them into a **shared 512-d latent space**:
-
-1. **Image tower**: `Linear(384 → 512)` → `BatchNorm` → `GELU` → `Dropout(0.3)` → `Linear(512 → 512)` → L2-normalize
-2. **Text tower**: `Linear(768 → 512)` → `BatchNorm` → `GELU` → `Dropout(0.3)` → `Linear(512 → 512)` → L2-normalize
-3. **Loss**: InfoNCE contrastive loss — for each batch of (image, text) pairs, compute the cosine similarity matrix and minimize cross-entropy so that matching pairs score highest. A learnable temperature parameter scales the logits.
-
-### Advanced Training Features
-*   **Regularization**: Integrated **Dropout** and **Batch Normalization** to ensure the model generalizes well to unseen art styles.
-*   **Early Stopping**: Automatically halts training when the validation loss plateaus, ensuring you always get the most optimized version of the model.
-*   **Synchronized Metrics**: A clean epoch-by-epoch summary is saved to **`data/metrics_summary.csv`**, allowing for easy comparison of training vs. validation loss in Excel/Sheets.
-
-This is trained with **PyTorch Lightning**, which handles data loading, gradient descent, checkpointing, and distributed training abstractions.
+### Advanced Infererence Logic
+User queries are embedded once and branched:
+- **Query -> RAW Nomic (768-d)**: Matched against the High-Fidelity Semantic Index.
+- **Query -> Projected Space (512-d)**: Matched against the Project Visual Index.
 
 ### Vector Search at Inference
-Once trained, all artwork embeddings are projected into the shared 512-d space and indexed with **FAISS** (`IndexFlatIP` — exact inner-product search). Because vectors are L2-normalized, inner product equals cosine similarity. A user query (text or image) is embedded, projected, and the top-K nearest neighbors are retrieved in milliseconds.
+Artwork embeddings are indexed with **FAISS** (`IndexFlatIP` — exact inner-product search). A user query (text or image) is embedded, branched, and the top nearest neighbors from both semantic and visual pools are retrieved.
 
 ### Key ML Libraries
 

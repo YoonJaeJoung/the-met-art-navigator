@@ -64,7 +64,10 @@ if MAP_DIR.exists():
 # ─── Global State ────────────────────────────────────────────────────────────
 
 _state = {
-    "faiss_index": None,
+    "index_visual": None,
+    "index_semantic": None,
+    "mapping_visual": None,
+    "mapping_semantic": None,
     "metadata": None,
     "gallery_coords": None,
     "model": None,
@@ -95,24 +98,47 @@ async def startup():
         _state["model"].eval()
         print("✓ Contrastive model loaded.")
 
-    # Load FAISS index
-    projected_path = DATA_DIR / "images_projected.pt"
-    if projected_path.exists():
-        import faiss
-        embeddings = torch.load(projected_path, map_location="cpu").numpy().astype(np.float32)
-        dim = embeddings.shape[1]
-        index = faiss.IndexFlatIP(dim)
-        index.add(embeddings)
-        _state["faiss_index"] = index
-        print(f"✓ FAISS index built: {index.ntotal} vectors, dim={dim}")
-
-    # Load metadata
+    # Load metadata FIRST
     metadata_path = DATA_DIR / "met_final.parquet"
     if not metadata_path.exists():
         metadata_path = DATA_DIR / "met_enriched.parquet"
     if metadata_path.exists():
         _state["metadata"] = pd.read_parquet(metadata_path)
         print(f"✓ Metadata loaded: {len(_state['metadata'])} records")
+
+        # Create mappings based on description availability
+        metadata = _state["metadata"]
+        has_desc = metadata["description"].notna() & (metadata["description"] != "")
+        
+        _state["mapping_semantic"] = np.where(has_desc)[0]
+        _state["mapping_visual"] = np.where(~has_desc)[0]
+        print(f"  - Semantic artworks: {len(_state['mapping_semantic'])}")
+        print(f"  - Visual artworks: {len(_state['mapping_visual'])}")
+
+    # Load FAISS indices
+    projected_path = DATA_DIR / "images_projected.pt"
+    if projected_path.exists() and _state["mapping_visual"] is not None:
+        import faiss
+        embeddings = torch.load(projected_path, map_location="cpu").numpy().astype(np.float32)
+        vis_emb = embeddings[_state["mapping_visual"]]
+        dim = vis_emb.shape[1]
+        index = faiss.IndexFlatIP(dim)
+        index.add(vis_emb)
+        _state["index_visual"] = index
+        print(f"✓ FAISS Visual index built: {index.ntotal} vectors, dim={dim}")
+
+    text_unprojected_path = DATA_DIR / "text_unprojected.pt"
+    if text_unprojected_path.exists() and _state["mapping_semantic"] is not None:
+        import faiss
+        embeddings_raw = torch.load(text_unprojected_path, map_location="cpu")
+        # Ensure L2 normalization for cosine similarity
+        embeddings_norm = F.normalize(embeddings_raw, p=2, dim=1).numpy().astype(np.float32)
+        sem_emb = embeddings_norm[_state["mapping_semantic"]]
+        dim = sem_emb.shape[1]
+        index = faiss.IndexFlatIP(dim)
+        index.add(sem_emb)
+        _state["index_semantic"] = index
+        print(f"✓ FAISS Semantic (High-Fidelity) index built: {index.ntotal} vectors, dim={dim}")
 
     # Load dynamic map geolocations to override stale parquet mappings
     coords_path = DATA_DIR / "gallery_coords.json"
@@ -143,23 +169,34 @@ class TextQuery(BaseModel):
     top_k: int = 10
 
 
-def search_faiss(query_embedding: np.ndarray, top_k: int = 10) -> list[dict]:
+def search_faiss(query_embedding: np.ndarray, index_type: str = "visual", top_k: int = 10) -> list[dict]:
     """Search FAISS index and return matched metadata."""
     import faiss
-    index = _state["faiss_index"]
+    if index_type == "visual":
+        index = _state.get("index_visual")
+        mapping = _state.get("mapping_visual")
+    else:
+        index = _state.get("index_semantic")
+        mapping = _state.get("mapping_semantic")
+
     metadata = _state["metadata"]
-    if index is None or metadata is None:
+    if index is None or metadata is None or mapping is None:
         return []
 
     # Request extra candidates to account for filtered out items
-    fetch_k = min(top_k * 5, len(metadata))
+    fetch_k = min(top_k * 5, index.ntotal)
+    if fetch_k == 0:
+        return []
+        
     distances, indices = index.search(query_embedding, fetch_k)
     results = []
     
     for dist, idx in zip(distances[0], indices[0]):
-        if idx < 0 or idx >= len(metadata):
+        if idx < 0 or idx >= len(mapping):
             continue
-        row = metadata.iloc[idx]
+            
+        real_idx = mapping[idx]
+        row = metadata.iloc[real_idx]
         
         # Filter out "The Cloisters"
         dept = str(row.get("department", ""))
@@ -203,37 +240,53 @@ def search_faiss(query_embedding: np.ndarray, top_k: int = 10) -> list[dict]:
 async def search_text(query: TextQuery):
     """Search by text query."""
     model = _state["model"]
-    if model is None or _state["faiss_index"] is None:
-        return {"error": "Model not loaded. Train the model first.", "results": []}
+    if model is None or (_state["index_semantic"] is None and _state["index_visual"] is None):
+        return {"error": "Model not loaded. Train the model first.", "results": {"semantic": [], "visual": []}}
 
     device = _state["device"]
     tokenizer = _state["text_tokenizer"]
     text_model = _state["text_model"]
 
-    # Embed the query
-    doc = f"search_query: {query.query}"
-    inputs = tokenizer([doc], padding=True, truncation=True, max_length=512, return_tensors="pt").to(device)
+    # Embed twice: once for Semantic (query-style), once for Visual (document-style for projector)
+    doc_query = f"search_query: {query.query}"
+    doc_project = f"search_document: {query.query}"
+    
+    inputs_query = tokenizer([doc_query], padding=True, truncation=True, max_length=512, return_tensors="pt").to(device)
+    inputs_doc = tokenizer([doc_project], padding=True, truncation=True, max_length=512, return_tensors="pt").to(device)
+    
     with torch.no_grad():
-        outputs = text_model(**inputs)
-    attention_mask = inputs["attention_mask"]
-    token_emb = outputs.last_hidden_state
-    mask_expanded = attention_mask.unsqueeze(-1).expand(token_emb.size()).float()
-    text_emb = torch.sum(token_emb * mask_expanded, 1) / torch.clamp(mask_expanded.sum(1), min=1e-9)
+        out_query = text_model(**inputs_query)
+        out_doc = text_model(**inputs_doc)
 
-    # Project through contrastive model
-    text_projected = F.normalize(model.text_projector(text_emb.to(device)), p=2, dim=1)
-    query_vec = text_projected.cpu().detach().numpy().astype(np.float32)
+    def pool_emb(outputs, attention_mask):
+        token_emb = outputs.last_hidden_state
+        mask_expanded = attention_mask.unsqueeze(-1).expand(token_emb.size()).float()
+        return torch.sum(token_emb * mask_expanded, 1) / torch.clamp(mask_expanded.sum(1), min=1e-9)
 
-    results = search_faiss(query_vec, query.top_k)
-    return {"query": query.query, "results": results}
+    text_emb_query = pool_emb(out_query, inputs_query["attention_mask"])
+    text_emb_doc = pool_emb(out_doc, inputs_doc["attention_mask"])
+
+    # 1. Semantic Search (768-d)
+    # L2 normalize raw query embedding for semantic cosine similarity
+    text_emb_norm = F.normalize(text_emb_query, p=2, dim=1)
+    query_vec_raw = text_emb_norm.cpu().detach().numpy().astype(np.float32)
+    results_semantic = search_faiss(query_vec_raw, "semantic", query.top_k)
+
+    # 2. Visual Search (512-d)
+    # Project document-style embedding through Contrastive Model
+    text_projected = F.normalize(model.text_projector(text_emb_doc.to(device)), p=2, dim=1)
+    query_vec_proj = text_projected.cpu().detach().numpy().astype(np.float32)
+    results_visual = search_faiss(query_vec_proj, "visual", query.top_k)
+
+    return {"query": query.query, "results": {"semantic": results_semantic, "visual": results_visual}}
 
 
 @app.post("/search/image")
 async def search_image(file: UploadFile = File(...), top_k: int = 10):
     """Search by uploaded image."""
     model = _state["model"]
-    if model is None or _state["faiss_index"] is None:
-        return {"error": "Model not loaded. Train the model first.", "results": []}
+    if model is None or (_state["index_semantic"] is None and _state["index_visual"] is None):
+        return {"error": "Model not loaded. Train the model first.", "results": {"semantic": [], "visual": []}}
 
     device = _state["device"]
     processor = _state["image_processor"]
@@ -245,14 +298,27 @@ async def search_image(file: UploadFile = File(...), top_k: int = 10):
     inputs = processor(images=[image], return_tensors="pt").to(device)
     with torch.no_grad():
         outputs = image_model(**inputs)
-    image_emb = outputs.last_hidden_state[:, 0, :]  # CLS token
+    image_emb = outputs.last_hidden_state[:, 0, :]  # CLS token (raw DINOv2)
 
-    # Project through contrastive model
+    # Search categories:
+    # For image search, Semantic (image query vs text index) is still cross-modal but uses projected space.
+    # Visual (image query vs image index) is direct image-to-image but in projected space for consistency.
+
+    # Project image through contrastive model
     img_projected = F.normalize(model.image_projector(image_emb.to(device)), p=2, dim=1)
-    query_vec = img_projected.cpu().detach().numpy().astype(np.float32)
+    query_vec_proj = img_projected.cpu().detach().numpy().astype(np.float32)
 
-    results = search_faiss(query_vec, top_k)
-    return {"results": results}
+    # Note: Semantic search with image query uses text_projected.pt index if we want cross-modal.
+    # But we previously updated index_semantic to use text_unprojected (768).
+    # This means image query (384) cannot directly search 768 semantic index without project/reshape.
+    # So for image queries, we MUST use the projected space (512) for semantic search if we want it.
+    
+    # Actually, for image search, let's keep it simple: Search Visual Match using projected.
+    results_visual = search_faiss(query_vec_proj, "visual", top_k)
+    
+    # If the user wants semantic match for images, we'd need another index for text_projected.
+    # We'll stick to Visual for image uploads as it's the most common mental model.
+    return {"results": {"semantic": [], "visual": results_visual}}
 
 
 # ─── Training Endpoint ───────────────────────────────────────────────────────
@@ -305,12 +371,23 @@ async def start_training(req: TrainRequest):
             torch.save(img_proj, DATA_DIR / "images_projected.pt")
             torch.save(txt_proj, DATA_DIR / "text_projected.pt")
 
-            # Rebuild FAISS index
+            # Rebuild FAISS indices
             import faiss
-            embeddings = img_proj.numpy().astype(np.float32)
-            index = faiss.IndexFlatIP(embeddings.shape[1])
-            index.add(embeddings)
-            _state["faiss_index"] = index
+            if _state["mapping_visual"] is not None:
+                vis_emb = img_proj.numpy().astype(np.float32)[_state["mapping_visual"]]
+                index_visual = faiss.IndexFlatIP(vis_emb.shape[1])
+                index_visual.add(vis_emb)
+                _state["index_visual"] = index_visual
+                
+            if _state["mapping_semantic"] is not None:
+                # Use raw text embeddings for semantic index, normalized
+                sem_emb_raw = all_texts.to(device)
+                sem_emb_norm = F.normalize(sem_emb_raw, p=2, dim=1).cpu().numpy().astype(np.float32)
+                sem_emb = sem_emb_norm[_state["mapping_semantic"]]
+                index_semantic = faiss.IndexFlatIP(sem_emb.shape[1])
+                index_semantic.add(sem_emb)
+                _state["index_semantic"] = index_semantic
+                
             _state["model"] = model.cpu()
 
             _state["training_status"] = "complete"
@@ -328,7 +405,8 @@ async def get_status():
     return {
         "training_status": _state["training_status"],
         "training_error": _state["training_error"],
-        "index_size": _state["faiss_index"].ntotal if _state["faiss_index"] else 0,
+        "index_visual_size": _state["index_visual"].ntotal if _state["index_visual"] else 0,
+        "index_semantic_size": _state["index_semantic"].ntotal if _state["index_semantic"] else 0,
         "metadata_size": len(_state["metadata"]) if _state["metadata"] is not None else 0,
     }
 

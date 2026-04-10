@@ -47,12 +47,6 @@ export default function App() {
             🖼️ Gallery
           </button>
           <button
-            className={`nav-tab ${view === 'training' ? 'active' : ''}`}
-            onClick={() => setView('training')}
-          >
-            🧠 Training
-          </button>
-          <button
             className={`nav-tab ${view === 'search' ? 'active' : ''}`}
             onClick={() => setView('search')}
           >
@@ -62,13 +56,13 @@ export default function App() {
       </header>
 
       {/* Body */}
-      <div className="app-body">
+      <div className={`app-body view-${view} ${results && (results.semantic?.length > 0 || results.visual?.length > 0) ? 'has-results' : ''}`}>
         {view === 'home' ? (
           <HomeView setView={setView} />
         ) : view === 'search' ? (
           <>
-            {/* Left: Search + Results */}
-            <div style={{ display: 'flex', flexDirection: 'column', width: 360, flexShrink: 0, borderRight: '1px solid var(--color-border)' }}>
+            {/* Search + Results */}
+            <div className="search-results-column">
               <SearchPanel
                 onResults={handleResults}
                 loading={loading}
@@ -81,15 +75,13 @@ export default function App() {
               />
             </div>
 
-            {/* Right: Map */}
+            {/* Map */}
             <MapViewer
-              results={results}
+              results={results && (results.semantic || results.visual) ? [...(results.semantic || []), ...(results.visual || [])] : []}
               selectedResult={selectedResult}
               onSelectResult={handleSelectResult}
             />
           </>
-        ) : view === 'training' ? (
-          <TrainingDashboard />
         ) : (
           <GalleryView />
         )}

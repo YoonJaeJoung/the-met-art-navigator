@@ -20,7 +20,7 @@ export default function SearchPanel({ onResults, loading, setLoading }) {
         body: JSON.stringify({ query: query.trim(), top_k: 20 }),
       });
       const data = await res.json();
-      onResults(data.results || []);
+      onResults(data.results || { semantic: [], visual: [] });
     } catch (err) {
       console.error('Search error:', err);
       onResults([]);
@@ -41,7 +41,7 @@ export default function SearchPanel({ onResults, loading, setLoading }) {
         body: form,
       });
       const data = await res.json();
-      onResults(data.results || []);
+      onResults(data.results || { semantic: [], visual: [] });
     } catch (err) {
       console.error('Search error:', err);
       onResults([]);

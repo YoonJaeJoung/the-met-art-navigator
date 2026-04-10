@@ -91,6 +91,10 @@ export default function MapViewer({ results, selectedResult, onSelectResult, mod
                   style={{
                     left: `${pin.x_pct * 100}%`,
                     top: `${pin.y_pct * 100}%`,
+                    width: '1.8%',
+                    minWidth: '8px',
+                    maxWidth: '32px',
+                    aspectRatio: '24/36',
                     zIndex: isSelected ? 100 : 5,
                     cursor: mode === 'galleries' ? 'pointer' : 'default',
                     opacity: mode === 'galleries' && selectedResult && !isSelected ? 0.4 : 1
@@ -104,9 +108,9 @@ export default function MapViewer({ results, selectedResult, onSelectResult, mod
                   <div 
                     className="pin-tooltip"
                     style={{
-                      transform: pin.x_pct > 0.8 ? 'translateX(-100%)' : pin.x_pct < 0.2 ? 'translateX(0)' : 'translateX(-50%)',
-                      left: pin.x_pct > 0.8 ? '0' : pin.x_pct < 0.2 ? '100%' : '50%',
-                      marginLeft: pin.x_pct > 0.8 ? '-12px' : pin.x_pct < 0.2 ? '12px' : '0'
+                      transform: pin.x_pct > 0.65 ? 'translateX(-100%)' : pin.x_pct < 0.35 ? 'translateX(0)' : 'translateX(-50%)',
+                      left: pin.x_pct > 0.65 ? '0' : pin.x_pct < 0.35 ? '100%' : '50%',
+                      marginLeft: pin.x_pct > 0.65 ? '-12px' : pin.x_pct < 0.35 ? '12px' : '0'
                     }}
                   >
                     {mode === 'artworks' ? `${pin.title} — Gallery ${pin.GalleryNumber}` : `Gallery ${pin.GalleryNumber}`}
