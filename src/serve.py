@@ -321,7 +321,7 @@ async def get_status():
 # ─── Gallery Map Data ─────────────────────────────────────────────────────────
 
 @app.get("/gallery")
-async def get_gallery(page: int = 1, page_size: int = 50):
+async def get_gallery(page: int = 1, page_size: int = 50, gallery: str = None):
     """Return paginated processed artworks."""
     metadata = _state["metadata"]
     if metadata is None:
@@ -330,6 +330,9 @@ async def get_gallery(page: int = 1, page_size: int = 50):
     # Filter out "The Cloisters"
     mask = ~metadata['department'].fillna("").astype(str).str.contains("Cloister", na=False) & \
            ~metadata['GalleryNumber'].fillna("").astype(str).str.startswith("00")
+           
+    if gallery:
+        mask = mask & (metadata['GalleryNumber'].fillna("").astype(str) == str(gallery))
 
     filtered_df = metadata[mask]
     total = len(filtered_df)
