@@ -87,7 +87,7 @@ export default function GalleryView() {
             </button>
           )}
         </div>
-        <div style={{ height: 450, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--color-border)' }}>
+        <div style={{ maxHeight: '60vh', overflow: 'auto', borderRadius: 8, border: '1px solid var(--color-border)' }}>
           <MapViewer 
             mode="galleries"
             results={galleries}
