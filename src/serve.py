@@ -333,7 +333,15 @@ async def get_gallery(page: int = 1, page_size: int = 50, gallery: str = None):
            ~metadata['GalleryNumber'].fillna("").astype(str).str.startswith("00")
            
     if gallery:
-        mask = mask & (metadata['GalleryNumber'].fillna("").astype(str) == str(gallery))
+        # Strip trailing decimal zeros safely and strip whitespace
+        metadata_gallery_str = metadata['GalleryNumber'].fillna("").astype(str).str.strip()
+        query_str = str(gallery).strip()
+        
+        # Handle cases where pandas casted "899" as "899.0" by slicing `.0` out 
+        metadata_gallery_str = metadata_gallery_str.str.replace(r'\.0$', '', regex=True)
+        query_str = query_str.replace('.0', '')
+        
+        mask = mask & (metadata_gallery_str == query_str)
 
     filtered_df = metadata[mask]
     total = len(filtered_df)
