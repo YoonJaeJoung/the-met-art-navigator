@@ -23,6 +23,10 @@ from pathlib import Path
 # Prevent OpenMP multiple initialization crash on MacOS when bringing faiss and torch together
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent))
+
 import lightning as L
 import numpy as np
 import pandas as pd
