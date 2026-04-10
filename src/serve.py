@@ -66,6 +66,7 @@ if MAP_DIR.exists():
 _state = {
     "faiss_index": None,
     "metadata": None,
+    "gallery_coords": None,
     "model": None,
     "text_tokenizer": None,
     "text_model": None,
@@ -113,6 +114,13 @@ async def startup():
         _state["metadata"] = pd.read_parquet(metadata_path)
         print(f"✓ Metadata loaded: {len(_state['metadata'])} records")
 
+    # Load dynamic map geolocations to override stale parquet mappings
+    coords_path = DATA_DIR / "gallery_coords.json"
+    if coords_path.exists():
+        with open(coords_path, "r") as f:
+            _state["gallery_coords"] = json.load(f)
+        print("✓ Live Gallery mapping coordinates loaded")
+
     # Load embedding models for online inference
     print("Loading DINOv2-small for image queries...")
     _state["image_processor"] = AutoImageProcessor.from_pretrained("facebook/dinov2-small")
@@ -157,7 +165,12 @@ def search_faiss(query_embedding: np.ndarray, top_k: int = 10) -> list[dict]:
         g_num = str(row.get("GalleryNumber", ""))
         if "Cloister" in dept or g_num.startswith("00"):
             continue
-            
+
+        # Override hardcoded parquet locations with live Apple Vision coordinates
+        live_coords = {}
+        if _state.get("gallery_coords") and g_num in _state["gallery_coords"]:
+            live_coords = _state["gallery_coords"][g_num]
+
         results.append({
             "rank": len(results) + 1,
             "score": float(dist),
@@ -166,17 +179,17 @@ def search_faiss(query_embedding: np.ndarray, top_k: int = 10) -> list[dict]:
             "artistDisplayName": str(row.get("artistDisplayName", "")),
             "medium": str(row.get("medium", "")),
             "department": str(row.get("department", "")),
-            "GalleryNumber": str(row.get("GalleryNumber", "")),
+            "GalleryNumber": g_num,
             "primaryImage": str(row.get("primaryImage", "")),
             "primaryImageSmall": str(row.get("primaryImageSmall", "")),
             "description": str(row.get("description", "")) if pd.notna(row.get("description")) else "",
             "culture": str(row.get("culture", "")) if pd.notna(row.get("culture")) else "",
             "period": str(row.get("period", "")) if pd.notna(row.get("period")) else "",
             "objectURL": str(row.get("objectURL", "")),
-            "floor": str(row.get("floor", "")),
-            "map_file": str(row.get("map_file", "")),
-            "x_pct": float(row.get("x_pct", 0)) if pd.notna(row.get("x_pct")) else None,
-            "y_pct": float(row.get("y_pct", 0)) if pd.notna(row.get("y_pct")) else None,
+            "floor": live_coords.get("floor", str(row.get("floor", ""))),
+            "map_file": live_coords.get("map_file", str(row.get("map_file", ""))),
+            "x_pct": float(live_coords.get("x_pct", row.get("x_pct", 0))) if live_coords.get("x_pct") or pd.notna(row.get("x_pct")) else None,
+            "y_pct": float(live_coords.get("y_pct", row.get("y_pct", 0))) if live_coords.get("y_pct") or pd.notna(row.get("y_pct")) else None,
         })
         
         if len(results) >= top_k:
