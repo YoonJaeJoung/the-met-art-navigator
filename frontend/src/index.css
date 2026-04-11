@@ -518,14 +518,13 @@ body {
   flex: 1;
   position: relative;
   overflow: auto;
-  padding: 20px;
+  padding: 40px 60px; /* Provides room for tooltips without affecting pin coordinates */
   text-align: center;
 }
 
 .map-wrapper {
   position: relative;
   display: inline-block;
-  padding: 0 40px; /* Safety gutter for tooltips near edges */
 }
 
 .map-wrapper img {
