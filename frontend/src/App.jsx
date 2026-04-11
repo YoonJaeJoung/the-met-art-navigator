@@ -10,14 +10,16 @@ import './index.css';
 
 export default function App() {
   const [view, setView] = useState('home'); // 'home' | 'search' | 'training' | 'gallery'
-  const [results, setResults] = useState([]);
+  const [results, setResults] = useState({ semantic: [], visual: [] });
   const [selectedResult, setSelectedResult] = useState(null);
   const [modalResult, setModalResult] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const handleResults = (newResults) => {
     setResults(newResults);
-    setSelectedResult(newResults.length > 0 ? newResults[0] : null);
+    // Flatten results to pick the first available candidate for auto-selection
+    const all = [...(newResults?.semantic || []), ...(newResults?.visual || [])];
+    setSelectedResult(all.length > 0 ? all[0] : null);
   };
 
   const handleSelectResult = (result) => {

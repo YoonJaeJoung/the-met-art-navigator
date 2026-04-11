@@ -23,7 +23,7 @@ export default function SearchPanel({ onResults, loading, setLoading }) {
       onResults(data.results || { semantic: [], visual: [] });
     } catch (err) {
       console.error('Search error:', err);
-      onResults([]);
+      onResults({ semantic: [], visual: [] });
     } finally {
       setLoading(false);
     }
@@ -44,7 +44,7 @@ export default function SearchPanel({ onResults, loading, setLoading }) {
       onResults(data.results || { semantic: [], visual: [] });
     } catch (err) {
       console.error('Search error:', err);
-      onResults([]);
+      onResults({ semantic: [], visual: [] });
     } finally {
       setLoading(false);
     }
