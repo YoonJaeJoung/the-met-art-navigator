@@ -3,9 +3,9 @@ import { useState, useEffect } from 'react';
 export default function ResultsSidebar({ results, selectedId, onSelect }) {
   const [activeTab, setActiveTab] = useState('semantic');
   
-  const semantic = results?.semantic || [];
+  const semantic = results?.semantic || (Array.isArray(results) ? results : []);
   const visual = results?.visual || [];
-  const hasResults = semantic.length > 0 || visual.length > 0;
+  const hasResults = (Array.isArray(results) && results.length > 0) || (results?.semantic?.length > 0 || results?.visual?.length > 0);
 
   // Auto-switch to the tab that actually has results if the current one is empty
   useEffect(() => {

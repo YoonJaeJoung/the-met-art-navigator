@@ -17,9 +17,15 @@ export default function App() {
 
   const handleResults = (newResults) => {
     setResults(newResults);
-    // Flatten results to pick the first available candidate for auto-selection
-    const all = [...(newResults?.semantic || []), ...(newResults?.visual || [])];
-    setSelectedResult(all.length > 0 ? all[0] : null);
+    // Pick first result for auto-selection, handling both flat array and categorized object
+    let first = null;
+    if (Array.isArray(newResults)) {
+      first = newResults.length > 0 ? newResults[0] : null;
+    } else if (newResults && typeof newResults === 'object') {
+      const all = [...(newResults.semantic || []), ...(newResults.visual || [])];
+      first = all.length > 0 ? all[0] : null;
+    }
+    setSelectedResult(first);
   };
 
   const handleSelectResult = (result) => {
@@ -79,7 +85,13 @@ export default function App() {
 
             {/* Map */}
             <MapViewer
-              results={results && (results.semantic || results.visual) ? [...(results.semantic || []), ...(results.visual || [])] : []}
+              results={
+                Array.isArray(results) 
+                  ? results 
+                  : (results && (results.semantic || results.visual) 
+                      ? [...(results.semantic || []), ...(results.visual || [])] 
+                      : [])
+              }
               selectedResult={selectedResult}
               onSelectResult={handleSelectResult}
             />
