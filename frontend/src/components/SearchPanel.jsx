@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API = import.meta.env.VITE_API_URL || 'https://ayjoung-met-art-navigator-api.hf.space';
 
 export default function SearchPanel({ onResults, loading, setLoading }) {
   const [mode, setMode] = useState('text'); // 'text' | 'image'

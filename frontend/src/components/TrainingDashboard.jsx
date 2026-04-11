@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import version21Data from '../mockData.json';
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API = import.meta.env.VITE_API_URL || 'https://ayjoung-met-art-navigator-api.hf.space';
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8765';
 
 export default function TrainingDashboard() {
